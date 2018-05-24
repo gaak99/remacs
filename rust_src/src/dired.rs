@@ -18,7 +18,9 @@ fn get_user_real_login_name() -> LispObject {
 
 #[cfg(windows)]
 fn get_users() -> LispObject {
-    get_user_real_login_name()
+    let mut unames = Vec::new();
+    unames.push(get_user_real_login_name());
+    list(&mut unames)
 }
 
 #[cfg(not(windows))]
