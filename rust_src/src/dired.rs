@@ -9,7 +9,6 @@ use remacs_sys::build_string;
 use remacs_sys::globals;
 
 use lisp::{defsubr, LispObject};
-#[cfg(not(windows))]
 use lists::list;
 
 fn get_user_real_login_name() -> LispObject {
