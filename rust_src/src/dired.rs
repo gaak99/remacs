@@ -4,6 +4,11 @@
 use libc;
 use libc::timespec as c_timespec;
 
+//#[cfg(not(windows))]
+//use std::ffi::{CStr, CString};
+
+#[cfg(windows)]
+use std::ffi::CString;
 #[cfg(not(windows))]
 use std::ffi::{CStr, CString};
 use std::fs;
@@ -59,11 +64,20 @@ struct FileAttrs {
     idf_uname: String,
     idf_gname: String,
     atime_s: i64,
+#[cfg(not(windows))]
     atime_ns: i64,
+#[cfg(windows)]
+    atime_ns: i32,
     mtime_s: i64,
+#[cfg(not(windows))]
     mtime_ns: i64,
+#[cfg(windows)]
+    mtime_ns: i32,
     ctime_s: i64,
+#[cfg(not(windows))]
     ctime_ns: i64,
+#[cfg(windows)]
+    ctime_ns: i32,
     size: i64,
     //file_mode: String,
     ino: i64,
@@ -176,12 +190,12 @@ impl FileAttrs {
         }
 
         self.atime_s = md.atime();
-        self.atime_ns = libc::c_long::from(md.atime_nsec());
+        //self.atime_ns = libc::c_long::from(md.atime_nsec());
+        self.atime_ns = md.atime_nsec();
         self.mtime_s = md.mtime();
-        //self.mtime_ns = md.mtime_nsec();
-        self.mtime_ns = libc::c_long::from(md.mtime_nsec());
+        self.mtime_ns = md.mtime_nsec();
         self.ctime_s = md.ctime();
-        self.ctime_ns = libc::c_long::from(md.ctime_nsec());
+        self.ctime_ns = md.ctime_nsec();
         
         self.size = md.size() as i64;
 
@@ -232,16 +246,16 @@ impl FileAttrs {
         //     to the file's attributes: owner and group, access mode bits, etc.
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.atime_s,
-            //tv_nsec: libc::c_long::from(self.atime_ns)
-            tv_nsec: self.atime_ns
+            tv_nsec: libc::c_long::from(self.atime_ns)
+            //tv_nsec: self.atime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.mtime_s,
-            tv_nsec: self.mtime_ns
+            tv_nsec: libc::c_long::from(self.mtime_ns)
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.ctime_s,
-            tv_nsec: self.ctime_ns
+            tv_nsec: libc::c_long::from(self.ctime_ns)
         }));
 
         //  7. Size in bytes.
