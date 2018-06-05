@@ -4,6 +4,7 @@
 use libc;
 use libc::timespec as c_timespec;
 
+#[cfg(not(windows))]
 use std::ffi::{CStr, CString};
 use std::fs;
 #[cfg(windows)]
@@ -175,11 +176,12 @@ impl FileAttrs {
         }
 
         self.atime_s = md.atime();
-        self.atime_ns = md.atime_nsec();
+        self.atime_ns = libc::c_long::from(md.atime_nsec());
         self.mtime_s = md.mtime();
-        self.mtime_ns = md.mtime_nsec();
+        //self.mtime_ns = md.mtime_nsec();
+        self.mtime_ns = libc::c_long::from(md.mtime_nsec());
         self.ctime_s = md.ctime();
-        self.ctime_ns = md.ctime_nsec();
+        self.ctime_ns = libc::c_long::from(md.ctime_nsec());
         
         self.size = md.size() as i64;
 
@@ -230,15 +232,16 @@ impl FileAttrs {
         //     to the file's attributes: owner and group, access mode bits, etc.
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.atime_s,
-            tv_nsec: libc::c_long::from(self.atime_ns)
+            //tv_nsec: libc::c_long::from(self.atime_ns)
+            tv_nsec: self.atime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.mtime_s,
-            tv_nsec: libc::c_long::from(self.mtime_ns)
+            tv_nsec: self.mtime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.ctime_s,
-            tv_nsec: libc::c_long::from(self.ctime_ns)
+            tv_nsec: self.ctime_ns
         }));
 
         //  7. Size in bytes.
