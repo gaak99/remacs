@@ -1,7 +1,7 @@
 //! Lisp functions for making directory listings.
 
 //#[cfg(not(windows))]
-use libc;
+use libc::{c_char, c_long, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
 use libc::timespec as c_timespec;
 
 //#[cfg(not(windows))]
@@ -64,20 +64,11 @@ struct FileAttrs {
     idf_uname: String,
     idf_gname: String,
     atime_s: i64,
-#[cfg(not(windows))]
-    atime_ns: i64,
-#[cfg(windows)]
-    atime_ns: i32,
+    atime_ns: c_long,
     mtime_s: i64,
-#[cfg(not(windows))]
-    mtime_ns: i64,
-#[cfg(windows)]
-    mtime_ns: i32,
+    mtime_ns: c_long,
     ctime_s: i64,
-#[cfg(not(windows))]
-    ctime_ns: i64,
-#[cfg(windows)]
-    ctime_ns: i32,
+    ctime_ns: c_long,
     size: i64,
     //file_mode: String,
     ino: i64,
@@ -166,23 +157,23 @@ impl FileAttrs {
             self.idf_uid = md.uid() as i32;
             self.idf_gid = md.gid() as i32;
         } else {
-            let pw: *mut libc::passwd = unsafe { libc::getpwuid(md.uid()) };
+            let pw: *mut passwd = unsafe { getpwuid(md.uid()) };
             if pw.is_null() {
                 self.idf_u_is_int = true;
                 self.idf_uid = md.uid() as i32;
             } else {
-                let c_buf: *const libc::c_char = unsafe { (*pw).pw_name };
+                let c_buf: *const c_char = unsafe { (*pw).pw_name };
                 let c_str: &CStr = unsafe { CStr::from_ptr(c_buf) };
                 let str_slice: &str = c_str.to_str().unwrap();
                 self.idf_uname = str_slice.to_owned();
             }
             
-            let gr: *mut libc::group = unsafe { libc::getgrgid(md.gid()) };
+            let gr: *mut group = unsafe { getgrgid(md.gid()) };
             if gr.is_null() {
                 self.idf_gid = md.gid() as i32;
                 self.idf_g_is_int = true;
             } else {
-                let c_buf: *const libc::c_char = unsafe { (*gr).gr_name };
+                let c_buf: *const c_char = unsafe { (*gr).gr_name };
                 let c_str: &CStr = unsafe { CStr::from_ptr(c_buf) };
                 let str_slice: &str = c_str.to_str().unwrap();
                 self.idf_gname = str_slice.to_owned();
@@ -191,11 +182,11 @@ impl FileAttrs {
 
         self.atime_s = md.atime();
         //self.atime_ns = libc::c_long::from(md.atime_nsec());
-        self.atime_ns = md.atime_nsec();
+        self.atime_ns = c_long::from(md.atime_nsec());
         self.mtime_s = md.mtime();
-        self.mtime_ns = md.mtime_nsec();
+        self.mtime_ns = c_long::from(md.mtime_nsec());
         self.ctime_s = md.ctime();
-        self.ctime_ns = md.ctime_nsec();
+        self.ctime_ns = c_long::from(md.ctime_nsec());
         
         self.size = md.size() as i64;
 
@@ -246,16 +237,16 @@ impl FileAttrs {
         //     to the file's attributes: owner and group, access mode bits, etc.
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.atime_s,
-            tv_nsec: libc::c_long::from(self.atime_ns)
+            tv_nsec: self.atime_ns
             //tv_nsec: self.atime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.mtime_s,
-            tv_nsec: libc::c_long::from(self.mtime_ns)
+            tv_nsec: self.mtime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.ctime_s,
-            tv_nsec: libc::c_long::from(self.ctime_ns)
+            tv_nsec: self.ctime_ns
         }));
 
         //  7. Size in bytes.
@@ -418,14 +409,14 @@ fn get_users() -> LispObject {
     let mut unames = Vec::new();
 
     while !done {
-        let pw: *mut libc::passwd = unsafe { libc::getpwent() };
+        let pw: *mut passwd = unsafe { getpwent() };
         if pw.is_null() {
             done = true;
         } else {
             unames.push(unsafe { build_string((*pw).pw_name) })
         }
     }
-    unsafe { libc::endpwent() };
+    unsafe { endpwent() };
 
     if unames.is_empty() {
         unames.push(get_user_real_login_name());
