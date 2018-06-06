@@ -1,8 +1,9 @@
 //! Lisp functions for making directory listings.
 
-//#[cfg(not(windows))]
-use libc::{c_char, c_long, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
+use libc::c_long;
 use libc::timespec as c_timespec;
+#[cfg(not(windows))]
+use libc::{c_char, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
 
 //#[cfg(not(windows))]
 //use std::ffi::{CStr, CString};
