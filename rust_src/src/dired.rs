@@ -107,6 +107,7 @@ impl FileAttrs {
 
     #[cfg(windows)]
     fn get(&mut self) -> Result<(), ()> {
+        //gb id_format still dead code?
         if let Ok(md) = fs::metadata(self.abpath.clone()) {
             if !md.is_dir() {                
                 self.size = md.file_size() as i64;
