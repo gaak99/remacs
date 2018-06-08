@@ -8,6 +8,9 @@ use libc::{c_char, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
 //#[cfg(not(windows))]
 //use std::ffi::{CStr, CString};
 
+//use std::io::prelude::*;
+use std::io;
+
 #[cfg(windows)]
 use std::ffi::CString;
 #[cfg(not(windows))]
@@ -17,24 +20,73 @@ use std::fs;
 use std::os::windows::prelude::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+use std::path::Path;
+use std::ffi::OsStr;
 use std::slice;
 
 use remacs_macros::lisp_fn;
-use remacs_sys::{build_string, filemode_string, globals, Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
+use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, globals, Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
 
 use lisp::{defsubr, LispObject};
 use lists::list;
 use time::make_lisp_time;
 
-// LispObject strings should use build_string for correct GC usage.
 trait StringExt {
+    // LispObject strings should use build_string for correct GC behavior.
     fn to_bstring(&self) -> LispObject;
+    fn to_cstring(&self) -> *const c_char;
+    fn to_dir_f(&self) -> (String, String);
 }
 
 impl StringExt for String {
     fn to_bstring(&self) -> LispObject {
         let c_str = CString::new(self.as_str()).unwrap();
         unsafe { build_string(c_str.as_ptr() as *const i8) }
+    }
+    fn to_cstring(&self) -> *const c_char {
+        let c_str = CString::new(self.as_str()).unwrap();
+        (c_str.as_ptr() as *const c_char)
+    }
+    // Split-up absolute path to directory and file
+    fn to_dir_f(&self) -> (String, String) {
+        let path = Path::new(self.as_str());
+        let parent: &Path;
+        match path.parent() {
+            None => parent = Path::new(""),
+            Some(p) => parent = p,
+        }
+        let stem: &OsStr;
+        match path.file_stem() {
+            None => stem = OsStr::new(""),
+            Some(s) => stem = s,
+        }
+        let ext: &OsStr;
+        match path.extension() {
+            None => ext = OsStr::new(""),
+            Some(s) => ext = s,
+        }
+
+        let dir_s: String;
+        let stem_s: String;
+        let ext_s: String;
+        match parent.to_str() {
+            None => error!("new parent path is not a valid UTF-8 sequence"),
+            Some(s) => dir_s = s.to_string(),
+        }
+        match stem.to_str() {
+            None => error!("new stem of path is not a valid UTF-8 sequence"),
+            Some(s) => stem_s = s.to_string(),
+        }
+        match ext.to_str() {
+            None => error!("new extension of path is not a valid UTF-8 sequence"),
+            Some(s) => ext_s = s.to_string(),
+        }
+
+        if ext_s.is_empty() {
+            (dir_s, stem_s)
+        } else {
+            (dir_s, stem_s + "." + &ext_s)
+        }
     }
 }
 
@@ -51,6 +103,7 @@ impl LispObjectExt for LispObject {
 }
 
 struct FileAttrs {
+    use_c_internal: bool, // escape hatch
     abpath: String,
     ftype_is_sym: bool,
     ftype_sym_path: String,
@@ -79,6 +132,7 @@ struct FileAttrs {
 impl FileAttrs {
     fn new(abpath: String, id_format: String) -> Self {
         Self {
+            use_c_internal: false,
             abpath,
             ftype_is_sym: false,
             ftype_sym_path: "deadbeef".to_string(),
@@ -106,42 +160,47 @@ impl FileAttrs {
     }
 
     #[cfg(windows)]
-    fn get(&mut self) -> Result<(), ()> {
-        //gb id_format still dead code?
-        if let Ok(md) = fs::metadata(self.abpath.clone()) {
-            if !md.is_dir() {                
-                self.size = md.file_size() as i64;
-            } else {
-                self.ftype_is_dir = true;
-            }
+    fn get(&mut self) -> io::Result<()> {
+        self.use_c_internal = true;
+        return Ok(());
+    }
+    
+    // fn get(&mut self) -> Result<(), ()> {
+    //     //gb id_format still dead code?
+    //     if let Ok(md) = fs::metadata(self.abpath.clone()) {
+    //         if !md.is_dir() {                
+    //             self.size = md.file_size() as i64;
+    //         } else {
+    //             self.ftype_is_dir = true;
+    //         }
 
-            // WindowsNT no ns value provided (ns init is 0)
-            self.atime_s = md.last_access_time() as i64;
-            self.mtime_s = md.last_write_time() as i64;
-            self.ctime_s = md.creation_time() as i64;
+    //         // WindowsNT no ns value provided (ns init is 0)
+    //         self.atime_s = md.last_access_time() as i64;
+    //         self.mtime_s = md.last_write_time() as i64;
+    //         self.ctime_s = md.creation_time() as i64;
 
-            return Ok(());
-        }
+    //         return Ok(());
+    //     }
 
-        Err(())
-    }   
+    //     Err(())
+    // }   
 
     // Get system-specific file attributes and populate FileAttrs.
     // No Remacs specific code is used (so easier to dev/test independantly).
+
     #[cfg(not(windows))]
-    fn get(&mut self) -> Result<(), ()> {
-        let md_res = fs::metadata(self.abpath.clone());
-        if md_res.is_err() {
-            return Err(());
-        }
-        let md = md_res.unwrap();
+    fn get(&mut self) -> io::Result<()> {
+        let md = fs::metadata(self.abpath.clone())?;
 
         // file_type
         let ft = md.file_type();
-        // ft.is_symlink() inexplicably always -> false on Linux (ditto Python).
+        // Why: ft.is_symlink() inexplicably always -> false on Linux (ditto Python).
+        // Cuz: the link is followed first thus is_symlink is always false.
         if let Ok(symmemaybe) = fs::read_link(self.abpath.clone()) {
             self.ftype_is_sym = true;
             self.ftype_sym_path = symmemaybe.to_str().unwrap().to_string();
+            self.use_c_internal = true;
+            return Ok(());
         } else {
             if ft.is_dir() {
                 self.ftype_is_dir = true;
@@ -198,8 +257,19 @@ impl FileAttrs {
         Ok(())
     }
 
-    // FileAttrs --> LispObject list
+    // FileAttrs -> LispObject list
     fn to_list(&self) -> LispObject {
+        if self.use_c_internal {
+            let (dir, f) = self.abpath.to_dir_f();
+            let name = CString::new(self.abpath.clone().as_str()).unwrap();            
+            return unsafe {
+                file_attributes_c_internal(name.as_ptr(),
+                                           LispObject::from(dir.as_str()),
+                                           LispObject::from(f.as_str()),
+                                           LispObject::from(self.id_format.as_str()))
+            }
+        }
+        
         let mut attrs = Vec::new();
 
         //  0. t for directory, string (name linked to) for symbolic link, or nil.
