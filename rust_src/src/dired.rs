@@ -4,6 +4,8 @@ use libc::c_long;
 use libc::timespec as c_timespec;
 #[cfg(not(windows))]
 use libc::{c_char, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
+#[cfg(windows)]
+use libc::c_char;
 
 //#[cfg(not(windows))]
 //use std::ffi::{CStr, CString};
@@ -15,9 +17,10 @@ use std::io;
 use std::ffi::CString;
 #[cfg(not(windows))]
 use std::ffi::{CStr, CString};
+#[cfg(not(windows))]
 use std::fs;
-#[cfg(windows)]
-use std::os::windows::prelude::*;
+//#[cfg(windows)]
+//use std::os::windows::prelude::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -162,6 +165,7 @@ impl FileAttrs {
     #[cfg(windows)]
     fn get(&mut self) -> io::Result<()> {
         self.use_c_internal = true;
+        
         return Ok(());
     }
     
