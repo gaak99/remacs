@@ -3570,8 +3570,14 @@ extern "C" {
         sexpflag: bool,
     ) -> LispObject;
     pub fn pset_sentinel(p: *mut Lisp_Process, val: LispObject);
-
     pub fn pset_childp(p: *mut Lisp_Process, val: LispObject);
+
+    // dired.c
+    pub fn file_attributes_c_internal(name: *const c_char,
+                                      directory: LispObject,
+                                      filename: LispObject,
+                                      id_format: LispObject) -> LispObject;
+    pub fn filemode_string(f: LispObject) -> LispObject;
 }
 
 /// Contains C definitions from the font.h header.
