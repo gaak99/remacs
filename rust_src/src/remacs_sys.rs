@@ -3573,10 +3573,12 @@ extern "C" {
     pub fn pset_childp(p: *mut Lisp_Process, val: LispObject);
 
     // dired.c
-    pub fn file_attributes_c_internal(name: *const c_char,
-                                      directory: LispObject,
-                                      filename: LispObject,
-                                      id_format: LispObject) -> LispObject;
+    pub fn file_attributes_c_internal(
+        name: *const c_char,
+        directory: LispObject,
+        filename: LispObject,
+        id_format: LispObject,
+    ) -> LispObject;
     pub fn filemode_string(f: LispObject) -> LispObject;
 }
 

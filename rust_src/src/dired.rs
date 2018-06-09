@@ -1,34 +1,28 @@
 //! Lisp functions for making directory listings.
 
-use libc::c_long;
-use libc::timespec as c_timespec;
 #[cfg(not(windows))]
 use libc::{c_char, endpwent, getgrgid, getpwent, getpwuid, group, passwd};
+use libc::{c_long, timespec as c_timespec};
 #[cfg(windows)]
 use libc::c_char;
 
-//#[cfg(not(windows))]
-//use std::ffi::{CStr, CString};
-
-//use std::io::prelude::*;
+use std::ffi::OsStr;
 use std::io;
+use std::path::Path;
+use std::slice;
 
+#[cfg(not(windows))]
+use std::ffi::{CStr, CString};
 #[cfg(windows)]
 use std::ffi::CString;
 #[cfg(not(windows))]
-use std::ffi::{CStr, CString};
-#[cfg(not(windows))]
 use std::fs;
-//#[cfg(windows)]
-//use std::os::windows::prelude::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
-use std::ffi::OsStr;
-use std::slice;
 
 use remacs_macros::lisp_fn;
-use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, globals, Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
+use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, globals,
+                 Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
 
 use lisp::{defsubr, LispObject};
 use lists::list;
@@ -141,7 +135,7 @@ impl FileAttrs {
             ftype_sym_path: "deadbeef".to_string(),
             ftype_is_dir: false,
             nlinks: 0,
-            id_format, 
+            id_format,
             idf_is_int: true,
             idf_u_is_int: false,
             idf_g_is_int: false,
@@ -165,32 +159,9 @@ impl FileAttrs {
     #[cfg(windows)]
     fn get(&mut self) -> io::Result<()> {
         self.use_c_internal = true;
-        
+
         return Ok(());
     }
-    
-    // fn get(&mut self) -> Result<(), ()> {
-    //     //gb id_format still dead code?
-    //     if let Ok(md) = fs::metadata(self.abpath.clone()) {
-    //         if !md.is_dir() {                
-    //             self.size = md.file_size() as i64;
-    //         } else {
-    //             self.ftype_is_dir = true;
-    //         }
-
-    //         // WindowsNT no ns value provided (ns init is 0)
-    //         self.atime_s = md.last_access_time() as i64;
-    //         self.mtime_s = md.last_write_time() as i64;
-    //         self.ctime_s = md.creation_time() as i64;
-
-    //         return Ok(());
-    //     }
-
-    //     Err(())
-    // }   
-
-    // Get system-specific file attributes and populate FileAttrs.
-    // No Remacs specific code is used (so easier to dev/test independantly).
 
     #[cfg(not(windows))]
     fn get(&mut self) -> io::Result<()> {
@@ -232,7 +203,7 @@ impl FileAttrs {
                 let str_slice: &str = c_str.to_str().unwrap();
                 self.idf_uname = str_slice.to_owned();
             }
-            
+
             let gr: *mut group = unsafe { getgrgid(md.gid()) };
             if gr.is_null() {
                 self.idf_gid = md.gid() as i32;
@@ -242,17 +213,16 @@ impl FileAttrs {
                 let c_str: &CStr = unsafe { CStr::from_ptr(c_buf) };
                 let str_slice: &str = c_str.to_str().unwrap();
                 self.idf_gname = str_slice.to_owned();
-            }        
+            }
         }
 
         self.atime_s = md.atime();
-        //self.atime_ns = libc::c_long::from(md.atime_nsec());
         self.atime_ns = c_long::from(md.atime_nsec());
         self.mtime_s = md.mtime();
         self.mtime_ns = c_long::from(md.mtime_nsec());
         self.ctime_s = md.ctime();
         self.ctime_ns = c_long::from(md.ctime_nsec());
-        
+
         self.size = md.size() as i64;
 
         self.ino = md.ino() as i64;
@@ -265,15 +235,17 @@ impl FileAttrs {
     fn to_list(&self) -> LispObject {
         if self.use_c_internal {
             let (dir, f) = self.abpath.to_dir_f();
-            let name = CString::new(self.abpath.clone().as_str()).unwrap();            
+            let name = CString::new(self.abpath.clone().as_str()).unwrap();
             return unsafe {
-                file_attributes_c_internal(name.as_ptr(),
-                                           LispObject::from(dir.as_str()),
-                                           LispObject::from(f.as_str()),
-                                           LispObject::from(self.id_format.as_str()))
-            }
+                file_attributes_c_internal(
+                    name.as_ptr(),
+                    LispObject::from(dir.as_str()),
+                    LispObject::from(f.as_str()),
+                    LispObject::from(self.id_format.as_str()),
+                )
+            };
         }
-        
+
         let mut attrs = Vec::new();
 
         //  0. t for directory, string (name linked to) for symbolic link, or nil.
@@ -286,10 +258,10 @@ impl FileAttrs {
                 attrs.push(LispObject::constant_nil());
             }
         }
-        
+
         //  1. Number of links to file.
         attrs.push(LispObject::from_natnum(self.nlinks as i64));
-        
+
         //  2. File uid as a string or a number.  If a string value cannot be
         //     looked up, a numeric value, either an integer or a float, is returned.
         //  3. File gid, likewise.
@@ -313,16 +285,15 @@ impl FileAttrs {
         //     to the file's attributes: owner and group, access mode bits, etc.
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.atime_s,
-            tv_nsec: self.atime_ns
-            //tv_nsec: self.atime_ns
+            tv_nsec: self.atime_ns, //tv_nsec: self.atime_ns
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.mtime_s,
-            tv_nsec: self.mtime_ns
+            tv_nsec: self.mtime_ns,
         }));
         attrs.push(make_lisp_time(c_timespec {
             tv_sec: self.ctime_s,
-            tv_nsec: self.ctime_ns
+            tv_nsec: self.ctime_ns,
         }));
 
         //  7. Size in bytes.
@@ -408,19 +379,14 @@ pub fn file_attributes(filename: LispObject, id_format: LispObject) -> LispObjec
     let handler = unsafe { Ffind_file_name_handler(fnexp, Qfile_attributes) };
     if handler.is_not_nil() {
         if id_format.is_not_nil() {
-            return call!(
-                handler,
-                Qfile_attributes,
-                fnexp,
-                id_format
-            );
+            return call!(handler, Qfile_attributes, fnexp, id_format);
         } else {
             return call!(handler, Qfile_attributes, fnexp);
         }
     }
 
     file_attributes_common(fnexp, id_format)
- }
+}
 
 fn file_attributes_common(abpath: LispObject, id_format: LispObject) -> LispObject {
     let (abpath_s, idf_s) = get_strings(abpath, id_format);
@@ -435,27 +401,16 @@ fn file_attributes_common(abpath: LispObject, id_format: LispObject) -> LispObje
 
 // Used by directory-files-and-attributes
 #[no_mangle]
-pub extern "C" fn file_attributes_internal(dirname: LispObject,
-                                           filename: LispObject,
-		                           id_format: LispObject) -> LispObject {
-
+pub extern "C" fn file_attributes_internal(
+    dirname: LispObject,
+    filename: LispObject,
+    id_format: LispObject,
+) -> LispObject {
     let abpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
     let abpath = LispObject::from(abpath_s.as_str());
 
     file_attributes_common(abpath, id_format)
 }
-
-// pub extern "C" fn file_attributes_internal(fd: i64,
-//                                 name: *const libc::c_char,
-// 		                dirname: LispObject,
-//                                 filename: LispObject,
-// 		                id_format: LispObject) -> LispObject {
-
-//     let abpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
-//     let abpath = LispObject::from(abpath_s.as_str());
-
-//     file_attributes_common(abpath, id_format)
-// }
 
 fn get_strings(abpath: LispObject, id_format: LispObject) -> (String, String) {
     let abpath_string = abpath.to_stdstring();
