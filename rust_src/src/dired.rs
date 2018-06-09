@@ -423,6 +423,13 @@ fn get_strings(abpath: LispObject, id_format: LispObject) -> (String, String) {
     }
 }
 
+/// Return t if first arg file attributes list is less than second.
+/// Comparison is in lexicographic order and case is significant.
+#[lisp_fn(min = "1")]
+pub fn file_attributes_lessp(f1: LispObject, f2: LispObject) -> LispObject {
+    LispObject::from_bool(f1.to_stdstring() < f2.to_stdstring())
+}
+
 fn get_user_real_login_name() -> LispObject {
     unsafe { globals.Vuser_real_login_name }
 }
