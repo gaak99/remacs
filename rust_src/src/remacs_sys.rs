@@ -3555,6 +3555,7 @@ extern "C" {
     pub fn Fdefault_value(symbol: LispObject) -> LispObject;
     pub fn swap_in_symval_forwarding(sym: *mut Lisp_Symbol, blv: *mut Lisp_Buffer_Local_Value);
     pub fn Fexpand_file_name(filename: LispObject, default_directory: LispObject) -> LispObject;
+    pub fn decode_file_name(filename: LispObject) -> LispObject;
     pub fn Ffind_file_name_handler(filename: LispObject, operation: LispObject) -> LispObject;
     pub fn window_list_1(
         window: LispObject,
