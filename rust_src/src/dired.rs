@@ -89,10 +89,19 @@ impl StringExt for String {
 }
 
 trait LispObjectExt {
+    fn to_idfstring(&self) -> String;
     fn to_stdstring(&self) -> String;
 }
 
 impl LispObjectExt for LispObject {
+    fn to_idfstring(&self) -> String {
+        if self.is_nil() {
+            "NOTstring".to_string()
+        } else {
+            let idf_sym_s = self.symbol_or_string_as_string();
+            idf_sym_s.to_string().to_lowercase()
+        }
+    }
     fn to_stdstring(&self) -> String {
         let s = self.as_string().unwrap(); //LispObject String
         let slice = unsafe { slice::from_raw_parts(s.const_data_ptr(), s.len_bytes() as usize) };
@@ -390,8 +399,7 @@ pub fn file_attributes(filename: LispObject, id_format: LispObject) -> LispObjec
 }
 
 fn file_attributes_common(abpath: LispObject, id_format: LispObject) -> LispObject {
-    let (abpath_s, idf_s) = get_strings(abpath, id_format);
-    let mut attrs = FileAttrs::new(abpath_s, idf_s);
+    let mut attrs = FileAttrs::new(abpath.to_stdstring(), id_format.to_idfstring());
     let res = attrs.get();
     if res.is_err() {
         Qnil
@@ -411,17 +419,6 @@ pub extern "C" fn file_attributes_internal(
     let abpath = LispObject::from(abpath_s.as_str());
 
     file_attributes_common(abpath, id_format)
-}
-
-fn get_strings(abpath: LispObject, id_format: LispObject) -> (String, String) {
-    let abpath_string = abpath.to_stdstring();
-    if id_format.is_nil() {
-        (abpath_string, "NOTstring".to_string())
-    } else {
-        let idf_sym_s = id_format.symbol_or_string_as_string();
-        let idf_string = idf_sym_s.to_string().to_lowercase();
-        (abpath_string, idf_string)
-    }
 }
 
 /// Return t if first arg file attributes list is less than second.
