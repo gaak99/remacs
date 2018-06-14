@@ -27,7 +27,8 @@ use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, glob
 use remacs_sys::{decode_file_name, Qdirectory_files, Qfile_missing};
 //use remacs_sys::{compile_pattern, re_pattern_buffer, re_search};
 use lisp::{defsubr, LispObject};
-use lists::list;
+use lists::{car, list};
+use strings::string_lessp;
 use time::make_lisp_time;
 
 struct DirEntries {
@@ -641,7 +642,7 @@ fn get_strings(abpath: LispObject, id_format: LispObject) -> (String, String) {
 /// Comparison is in lexicographic order and case is significant.
 #[lisp_fn(min = "1")]
 pub fn file_attributes_lessp(f1: LispObject, f2: LispObject) -> LispObject {
-    LispObject::from_bool(f1.to_stdstring() < f2.to_stdstring())
+    LispObject::from_bool(string_lessp(car(f1), car(f2)))
 }
 
 fn get_user_real_login_name() -> LispObject {
