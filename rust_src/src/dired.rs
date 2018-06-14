@@ -25,7 +25,8 @@ use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, glob
                  Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
 
 use lisp::{defsubr, LispObject};
-use lists::list;
+use lists::{car, list};
+use strings::string_lessp;
 use time::make_lisp_time;
 
 trait StringExt {
@@ -427,7 +428,7 @@ fn get_strings(abpath: LispObject, id_format: LispObject) -> (String, String) {
 /// Comparison is in lexicographic order and case is significant.
 #[lisp_fn(min = "1")]
 pub fn file_attributes_lessp(f1: LispObject, f2: LispObject) -> LispObject {
-    LispObject::from_bool(f1.to_stdstring() < f2.to_stdstring())
+    LispObject::from_bool(string_lessp(car(f1), car(f2)))
 }
 
 fn get_user_real_login_name() -> LispObject {
