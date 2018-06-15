@@ -111,7 +111,7 @@ impl LispObjectExt for LispObject {
 
 struct FileAttrs {
     use_c_internal: bool, // escape hatch
-    abpath: String,
+    fpath: String,
     ftype_is_sym: bool,
     ftype_sym_path: String,
     ftype_is_dir: bool,
@@ -137,10 +137,10 @@ struct FileAttrs {
 }
 
 impl FileAttrs {
-    fn new(abpath: String, id_format: String) -> Self {
+    fn new(fpath: String, id_format: String) -> Self {
         Self {
             use_c_internal: false,
-            abpath,
+            fpath,
             ftype_is_sym: false,
             ftype_sym_path: "deadbeef".to_string(),
             ftype_is_dir: false,
@@ -168,6 +168,10 @@ impl FileAttrs {
 
     #[cfg(windows)]
     fn get(&mut self) -> io::Result<()> {
+        // Punt back to C for all Windows NT cases. The Rust trait
+        // std::os::windows::fs::MetadataExt does not provide most of the
+        // fields needed. It does provide the 3 times but they need to be
+        // converted to Unix time.
         self.use_c_internal = true;
 
         return Ok(());
@@ -175,16 +179,22 @@ impl FileAttrs {
 
     #[cfg(not(windows))]
     fn get(&mut self) -> io::Result<()> {
-        let md = fs::metadata(self.abpath.clone())?;
+        let md = fs::metadata(self.fpath.clone())?;
 
         // file_type
         let ft = md.file_type();
-        // Why: ft.is_symlink() inexplicably always -> false on Linux (ditto Python).
-        // Cuz: the link is followed first thus is_symlink is always false.
-        if let Ok(symmemaybe) = fs::read_link(self.abpath.clone()) {
+        // is_symlink() appears to be always -- somewhat counter intuitively --
+        // false cuz the link is followed first.
+        if let Ok(symmemaybe) = fs::read_link(self.fpath.clone()) {
             self.ftype_is_sym = true;
             self.ftype_sym_path = symmemaybe.to_str().unwrap().to_string();
+
+            // Punt back to C for symlinks as the Rust trait
+            // std::os::fs::symlink_metadata does not provide most
+            // of the fields needed.
+            // std::os::fs::metadata does not work cuz it follows the link first.
             self.use_c_internal = true;
+
             return Ok(());
         } else {
             if ft.is_dir() {
@@ -244,8 +254,8 @@ impl FileAttrs {
     // FileAttrs -> LispObject list
     fn to_list(&self) -> LispObject {
         if self.use_c_internal {
-            let (dir, f) = self.abpath.to_dir_f();
-            let name = CString::new(self.abpath.clone().as_str()).unwrap();
+            let (dir, f) = self.fpath.to_dir_f();
+            let name = CString::new(self.fpath.clone().as_str()).unwrap();
             return unsafe {
                 file_attributes_c_internal(
                     name.as_ptr(),
@@ -312,9 +322,9 @@ impl FileAttrs {
         attrs.push(LispObject::from_natnum(self.size));
 
         //  8. File modes, as a string of ten letters or dashes as in ls -l.
-        //attrs.push(self.file_mode.to_owned().to_bstring());
-        let abpath_lo = LispObject::from(self.abpath.as_str());
-        attrs.push(unsafe { filemode_string(abpath_lo) });
+        let fpath_lo = LispObject::from(self.fpath.as_str());
+        //  Punt back to C until the filemode_string code is ported to Rust.
+        attrs.push(unsafe { filemode_string(fpath_lo) });
 
         //  9. An unspecified value, present only for backward compatibility.
         attrs.push(LispObject::constant_t());
@@ -398,8 +408,8 @@ pub fn file_attributes(filename: LispObject, id_format: LispObject) -> LispObjec
     file_attributes_common(fnexp, id_format)
 }
 
-fn file_attributes_common(abpath: LispObject, id_format: LispObject) -> LispObject {
-    let mut attrs = FileAttrs::new(abpath.to_stdstring(), id_format.to_idfstring());
+fn file_attributes_common(fpath: LispObject, id_format: LispObject) -> LispObject {
+    let mut attrs = FileAttrs::new(fpath.to_stdstring(), id_format.to_idfstring());
     let res = attrs.get();
     if res.is_err() {
         Qnil
@@ -415,10 +425,10 @@ pub extern "C" fn file_attributes_internal(
     filename: LispObject,
     id_format: LispObject,
 ) -> LispObject {
-    let abpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
-    let abpath = LispObject::from(abpath_s.as_str());
+    let fpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
+    let fpath = LispObject::from(fpath_s.as_str());
 
-    file_attributes_common(abpath, id_format)
+    file_attributes_common(fpath, id_format)
 }
 
 /// Return t if first arg file attributes list is less than second.

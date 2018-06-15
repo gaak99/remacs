@@ -5,10 +5,14 @@
 (require 'ert)
 
 (ert-deftest test-file-attributes-lessp ()
-  (should-error (eval '(file-attributes-lessp "rms" "wilfred")) :type 'wrong-type-argument)
-  (should-error (eval '(file-attributes-lessp '("rms") "wilfred")) :type 'wrong-type-argument)
-  (should (eq t (file-attributes-lessp '("rms") '("wilfred"))))
-  (should (eq nil (file-attributes-lessp '("wilfred") '("rms")))))
+  (should-error (eval
+                 '(file-attributes-lessp "rms" "wilfred"))
+                :type 'wrong-type-argument)
+  (should-error (eval
+                 '(file-attributes-lessp '("rms" t) "wilfred"))
+                :type 'wrong-type-argument)
+  (should (file-attributes-lessp '("rms" t) '("wilfred" t)))
+  (should (not (file-attributes-lessp '("wilfred" t) '("rms" t)))))
 
 (ert-deftest test-system-users ()
   (should-error (eval '(system-users 'rms)) :type 'wrong-number-of-arguments)
