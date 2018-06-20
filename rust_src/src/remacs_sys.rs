@@ -15,7 +15,7 @@
 //! - `USE_LSB_TAG`
 //! - `BoolBF`
 
-use libc::{self, c_void, ptrdiff_t};
+use libc::{self, c_char, c_void, ptrdiff_t};
 use std;
 
 use libc::timespec;
@@ -110,6 +110,13 @@ extern "C" {
     pub fn is_minibuffer(w: *const Lisp_Window) -> bool;
     pub static minibuf_prompt: LispObject;
     pub fn pset_sentinel(p: *mut Lisp_Process, val: LispObject);
+    pub fn file_attributes_c_internal(
+        name: *const c_char,
+        directory: LispObject,
+        filename: LispObject,
+        id_format: LispObject,
+    ) -> LispObject;
+    pub fn filemode_string(f: LispObject) -> LispObject;
 }
 
 // Largest and smallest numbers that can be represented as fixnums in
