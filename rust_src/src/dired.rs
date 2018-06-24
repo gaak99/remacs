@@ -25,13 +25,13 @@ use std::fs;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 
-#[cfg(not(windows))]
+//#[cfg(not(windows))]
 use remacs_macros::lisp_fn;
 #[cfg(not(windows))]
 use remacs_sys::{build_string, file_attributes_c_internal, filemode_string,
                  Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
 
-#[cfg(not(windows))]
+//#[cfg(not(windows))]
 use lisp::{defsubr, LispObject};
 #[cfg(not(windows))]
 use lists::{car, list};
