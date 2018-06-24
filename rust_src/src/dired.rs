@@ -33,8 +33,9 @@ use remacs_sys::{build_string, file_attributes_c_internal, filemode_string,
 
 //#[cfg(not(windows))]
 use lisp::{defsubr, LispObject};
+use lists::car;
 #[cfg(not(windows))]
-use lists::{car, list};
+use lists::list;
 //#[cfg(not(windows))]
 use strings::string_lessp;
 #[cfg(not(windows))]
