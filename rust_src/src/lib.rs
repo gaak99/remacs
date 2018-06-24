@@ -57,6 +57,7 @@ mod cmds;
 mod crypto;
 mod data;
 mod dired;
+mod dired_systemusers;
 mod dispnew;
 mod editfns;
 mod eval;
