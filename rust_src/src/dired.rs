@@ -6,13 +6,22 @@ use libc;
 use remacs_macros::lisp_fn;
 #[cfg(not(windows))]
 use remacs_sys::build_string;
-use remacs_sys::globals;
+//use remacs_sys::globals;
 
 use lisp::{defsubr, LispObject};
-use lists::list;
+use lists::{car, list};
+use strings::string_lessp;
+
+/// Return t if first arg file attributes list is less than second.
+/// Comparison is in lexicographic order and case is significant.
+#[lisp_fn(min = "2")]
+pub fn file_attributes_lessp(f1: LispObject, f2: LispObject) -> LispObject {
+    LispObject::from_bool(string_lessp(car(f1), car(f2)))
+}
 
 fn get_user_real_login_name() -> LispObject {
-    unsafe { globals.f_Vuser_real_login_name }
+    LispObject::from("gb")
+    //unsafe { globals.Vuser_real_login_name }
 }
 
 #[cfg(windows)]
