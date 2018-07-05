@@ -455,7 +455,7 @@ pub extern "C" fn file_attributes_internal(
 /// Return t if first arg file attributes list is less than second.
 /// Comparison is in lexicographic order and case is significant.
 //#[cfg(not(windows))]
-#[lisp_fn(min = "1")]
+#[lisp_fn]
 pub fn file_attributes_lessp(f1: LispObject, f2: LispObject) -> LispObject {
     LispObject::from_bool(string_lessp(car(f1), car(f2)))
 }

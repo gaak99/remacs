@@ -370,12 +370,28 @@ fn generate_include_files() -> Result<(), BuildError> {
     let mut out_file = File::create(out_path)?;
 
     for mod_data in &modules {
+        #[cfg(windows)]
+        for func in &mod_data.c_exports {
+            if mod_data.info.name != "dired" || func != "file_attributes_internal" { 
+                write!(out_file, "pub use {}::{};\n", mod_data.info.name, func)?;
+            }
+        }
+        #[cfg(not(windows))]
         for func in &mod_data.c_exports {
             write!(out_file, "pub use {}::{};\n", mod_data.info.name, func)?;
         }
+
+        #[cfg(windows)]
+        for func in &mod_data.lisp_fns {
+            if mod_data.info.name != "dired" || func != "file_attributes" { 
+                write!(out_file, "pub use {}::F{};\n", mod_data.info.name, func)?;
+            }
+        }
+        #[cfg(not(windows))]
         for func in &mod_data.lisp_fns {
             write!(out_file, "pub use {}::F{};\n", mod_data.info.name, func)?;
         }
+
     }
     write!(out_file, "\n")?;
 
