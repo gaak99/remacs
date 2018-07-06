@@ -1266,9 +1266,9 @@ syms_of_dired (void)
   defsubr (&Sdirectory_files_and_attributes);
   defsubr (&Sfile_name_completion);
   defsubr (&Sfile_name_all_completions);
-#ifdef WINDOWSNT
-  defsubr (&Sfile_attributes);
-#endif
+/* #ifdef WINDOWSNT */
+/*   defsubr (&Sfile_attributes); */
+/* #endif */
   /* defsubr (&Sfile_attributes_lessp); */
   defsubr (&Ssystem_groups);
 
