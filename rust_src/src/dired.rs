@@ -31,7 +31,7 @@ use remacs_macros::lisp_fn;
 use remacs_sys::{build_string, file_attributes_c_internal, filemode_string,
                  Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
 #[cfg(windows)]
-use remacs_sys::file_attributes_c;
+use remacs_sys::{file_attributes_c, Qnil};
 
 //#[cfg(not(windows))]
 use lisp::{defsubr, LispObject};
