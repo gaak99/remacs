@@ -370,6 +370,7 @@ fn generate_include_files() -> Result<(), BuildError> {
     let mut out_file = File::create(out_path)?;
 
     for mod_data in &modules {
+        //gb
         #[cfg(windows)]
         for func in &mod_data.c_exports {
             if mod_data.info.name != "dired" || func != "file_attributes_internal" { 
@@ -381,6 +382,7 @@ fn generate_include_files() -> Result<(), BuildError> {
             write!(out_file, "pub use {}::{};\n", mod_data.info.name, func)?;
         }
 
+        //gb
         #[cfg(windows)]
         for func in &mod_data.lisp_fns {
             if mod_data.info.name != "dired" || func != "file_attributes" { 
@@ -412,11 +414,46 @@ fn generate_include_files() -> Result<(), BuildError> {
 
         if !mod_data.lisp_fns.is_empty() {
             let mut file = File::create(&exports_path)?;
+
+            #[cfg(not(windows))]
             write!(
                 file,
                 "export_lisp_fns! {{ {} }}\n",
                 mod_data.lisp_fns.join(", ")
             )?;
+
+            //gb plsplspls do better - use itertools join instead?
+            #[cfg(windows)]
+            {
+                write!(
+                    file,
+                    "export_lisp_fns! {{ "
+                )?;
+                let l = mod_data.lisp_fns.len();
+                let mut outed = false;
+                for i in 0..l {
+                    if mod_data.lisp_fns[i] != "file_attributes" {
+                        write!(
+                            file,
+                            "{}",
+                            mod_data.lisp_fns[i]
+                        )?;
+                        outed = true;
+                    }
+                    if i+1 == l { break };
+                    if outed {
+                        write!(
+                            file,
+                            ", "
+                        )?;
+                    }
+                    outed = false;
+                }
+                write!(
+                    file,
+                    " }}\n"
+                )?;
+            }
 
             write!(out_file, "    {}::rust_init_syms();\n", mod_data.info.name)?;
         }
