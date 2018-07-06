@@ -438,19 +438,50 @@ fn file_attributes_common(fpath: LispObject, id_format: LispObject) -> LispObjec
     }
 }
 
+//gb dummy
+// #[cfg(windows)]
+// #[no_mangle]
+// pub extern "C" fn file_attributes_rust_internal(
+//     // dirname: LispObject,
+//     // filename: LispObject,
+//     // id_format: LispObject,
+// ) -> LispObject {
+//     println!("dummy ftw(indows)")
+// }
+
 // Used by directory-files-and-attributes
-#[cfg(not(windows))]
+//#[cfg(not(windows))]
 #[no_mangle]
-pub extern "C" fn file_attributes_internal(
+pub extern "C" fn file_attributes_rust_internal(
     dirname: LispObject,
     filename: LispObject,
     id_format: LispObject,
 ) -> LispObject {
-    let fpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
-    let fpath = LispObject::from(fpath_s.as_str());
+    #[cfg(not(windows))]
+    {
+        let fpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
+        let fpath = LispObject::from(fpath_s.as_str());
 
-    file_attributes_common(fpath, id_format)
+        file_attributes_common(fpath, id_format)
+    }
+
+    #[cfg(windows)]
+    println!("dummy ftw(indows)")
 }
+
+//gb ok
+//#[cfg(not(windows))]
+// #[no_mangle]
+// pub extern "C" fn file_attributes_rust_internal(
+//     dirname: LispObject,
+//     filename: LispObject,
+//     id_format: LispObject,
+// ) -> LispObject {
+//     let fpath_s = dirname.to_stdstring() + "/" + &filename.to_stdstring();
+//     let fpath = LispObject::from(fpath_s.as_str());
+
+//     file_attributes_common(fpath, id_format)
+// }
 
 /// Return t if first arg file attributes list is less than second.
 /// Comparison is in lexicographic order and case is significant.
