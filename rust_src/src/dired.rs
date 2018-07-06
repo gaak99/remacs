@@ -30,6 +30,8 @@ use remacs_macros::lisp_fn;
 #[cfg(not(windows))]
 use remacs_sys::{build_string, file_attributes_c_internal, filemode_string,
                  Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
+#[cfg(windows)]
+use remacs_sys::file_attributes_c;
 
 //#[cfg(not(windows))]
 use lisp::{defsubr, LispObject};
@@ -411,20 +413,26 @@ impl FileAttrs {
 ///
 /// On some FAT-based filesystems, only the date of last access is recorded,
 /// so last access time will always be midnight of that day.
-#[cfg(not(windows))]
+//#[cfg(not(windows))]
 #[lisp_fn(min = "1")]
 pub fn file_attributes(filename: LispObject, id_format: LispObject) -> LispObject {
-    let fnexp = unsafe { Fexpand_file_name(filename.to_raw(), Qnil) };
-    let handler = unsafe { Ffind_file_name_handler(fnexp, Qfile_attributes) };
-    if handler.is_not_nil() {
-        if id_format.is_not_nil() {
-            return call!(handler, Qfile_attributes, fnexp, id_format);
-        } else {
-            return call!(handler, Qfile_attributes, fnexp);
+    #[cfg(not(windows))]
+    {
+        let fnexp = unsafe { Fexpand_file_name(filename.to_raw(), Qnil) };
+        let handler = unsafe { Ffind_file_name_handler(fnexp, Qfile_attributes) };
+        if handler.is_not_nil() {
+            if id_format.is_not_nil() {
+                return call!(handler, Qfile_attributes, fnexp, id_format);
+            } else {
+                return call!(handler, Qfile_attributes, fnexp);
+            }
         }
+
+        file_attributes_common(fnexp, id_format)
     }
 
-    file_attributes_common(fnexp, id_format)
+    #[cfg(windows)]
+    file_attributes_c(filename, id_format)
 }
 
 #[cfg(not(windows))]
@@ -466,7 +474,7 @@ pub extern "C" fn file_attributes_rust_internal(
     }
 
     #[cfg(windows)]
-    println!("dummy ftw(indows)")
+    Qnil
 }
 
 //gb ok

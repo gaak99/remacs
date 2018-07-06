@@ -69,6 +69,8 @@ extern Lisp_Object file_attributes_rust_internal (Lisp_Object,
 						  Lisp_Object);
 /*gb */
 #ifdef WINDOWSNT
+Lisp_Object file_attributes_c(Lisp_Object, Lisp_Object);
+
 static int
 dummy_file_attributes_rust_internal(void) {
   (void) file_attributes_rust_internal(Qnil, Qnil, Qnil);
@@ -882,8 +884,8 @@ stat_gname (struct stat *st)
 
 /*gb*/
 #ifdef WINDOWSNT
-DEFUN ("file-attributes", Ffile_attributes, Sfile_attributes, 1, 2, 0,
-       doc: /* Return a list of attributes of file FILENAME.
+/* DEFUN ("file-attributes", Ffile_attributes, Sfile_attributes, 1, 2, 0,
+       doc: Return a list of attributes of file FILENAME.
 Value is nil if specified file cannot be opened.
 
 ID-FORMAT specifies the preferred format of attributes uid and gid (see
@@ -931,8 +933,10 @@ On MS-Windows, performance depends on `w32-get-true-file-attributes',
 which see.
 
 On some FAT-based filesystems, only the date of last access is recorded,
-so last access time will always be midnight of that day.  */)
-  (Lisp_Object filename, Lisp_Object id_format)
+so last access time will always be midnight of that day.  )*/
+
+Lisp_Object
+file_attributes_c(Lisp_Object filename, Lisp_Object id_format)
 {
   Lisp_Object encoded;
   Lisp_Object handler;
