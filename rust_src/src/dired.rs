@@ -432,7 +432,7 @@ pub fn file_attributes(filename: LispObject, id_format: LispObject) -> LispObjec
     }
 
     #[cfg(windows)]
-    file_attributes_c(filename, id_format)
+    unsafe { file_attributes_c(filename, id_format) }
 }
 
 #[cfg(not(windows))]
@@ -474,7 +474,13 @@ pub extern "C" fn file_attributes_rust_internal(
     }
 
     #[cfg(windows)]
-    Qnil
+    {
+        if dirname.is_nil() || filename.is_nil() || id_format.is_nil() {
+            return Qnil;
+        }
+
+        Qfile_attributes
+    }
 }
 
 //gb ok
