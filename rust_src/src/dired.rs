@@ -1,10 +1,10 @@
 //! Lisp functions for making directory listings.
 
 #[cfg(unix)]
-include!("dired_unix.rs__");
+include!("dired_unix.rs");
 
 #[cfg(windows)]
-include!("dired_windows.rs__");
+include!("dired_windows.rs");
 
 /// Return a list of attributes of file FILENAME.
 /// Value is nil if specified file cannot be opened.
