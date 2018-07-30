@@ -1,15 +1,19 @@
 use libc::{c_char, c_long, endpwent, getgrgid, getpwent, getpwuid, group, passwd,
-           timespec as c_timespec};
+           timespec as c_timespec, size_t, ssize_t};
 
+use std::cmp::Ordering;
 use std::ffi::{CStr, CString, OsStr};
 use std::fs;
 use std::io;
+use std::ptr::null_mut;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::slice;
 
 use remacs_sys::{build_string, file_attributes_c_internal, filemode_string, globals,
                  Fexpand_file_name, Ffind_file_name_handler, Qfile_attributes, Qnil};
+use remacs_sys::{decode_file_name, Qdirectory_files, Qdirectory_files_and_attributes, Qfile_missing};
+use remacs_sys::{compile_pattern, re_pattern_buffer, re_search};
 
 use lisp::LispObject;
 use lists::list;
@@ -93,6 +97,291 @@ impl LispObjectExt for LispObject {
         let slice = unsafe { slice::from_raw_parts(s.const_data_ptr(), s.len_bytes() as usize) };
         String::from_utf8_lossy(slice).into_owned()
     }
+}
+
+struct DirEntries {
+    directory: String,
+    full: bool,
+    match_re: String,
+    nosort: bool,
+    attrs: bool,
+    //id_format: String,
+    id_format: LispObject,
+    ents: Vec<String>,
+    //ents_matched: Vec<String>,
+    ents_attrs: Vec<LispObject>,
+    //ents_matched_lo: Vec<LispObject>,
+}
+
+impl DirEntries {
+    fn new(
+        directory: String,
+        full: bool,
+        match_re: String,
+        nosort: bool,
+        attrs: bool,
+        id_format: LispObject,
+    ) -> Self {
+        Self {
+            directory,
+            full,
+            match_re,
+            nosort,
+            attrs,
+            id_format,
+            ents: Vec::new(),
+            ents_attrs: Vec::new(),
+        }
+    }
+
+    // read_dir() does not return .&.. so bolt them on
+    fn add_dots(&mut self) {
+        let dir = self.directory.clone();
+        let slash = String::from("/");
+        let mut d = String::from(".");
+        let mut dd = String::from("..");
+        if self.full {
+            d = dir.clone() + &slash + &d.clone();
+            dd = dir.clone() + &slash + &dd.clone();
+        }
+
+        if self.match_re.is_empty() {        
+            self.ents.push(d.clone());
+            self.ents.push(dd.clone());
+        } else {
+            let re = RegEx::new(self.match_re.to_owned());
+
+            if re.is_match(d.as_str()) {
+                self.ents.push(d.clone());
+            }
+            if re.is_match(dd.as_str()) {
+                self.ents.push(dd.clone());
+            }
+        }
+    }
+    
+    fn get(&mut self) -> io::Result<()> {
+        self.add_dots();
+        let dir_p = Path::new(&self.directory);
+        let dir = self.directory.clone();
+        let slash = String::from("/");
+
+        if !dir_p.is_dir() {
+            xsignal!(
+                Qfile_missing,
+                LispObject::from("Opening directory: no such file or directory"),
+                self.directory.to_bstring()
+            );
+        }
+
+        for ent in fs::read_dir(dir_p)? {
+            let ent = ent?;
+            let f_enc = ent.file_name().into_string().unwrap();
+            let f_enc_lo = LispObject::from(f_enc.as_str()); // encoded
+            let f_dec_lo = unsafe { decode_file_name(f_enc_lo) }; // decoded
+            let f = f_dec_lo.to_stdstring();
+            let fp = dir.clone() + &slash + &f.clone();
+
+            let mut ff = f.clone();
+            if self.full {
+                ff = fp.clone();
+            }
+
+            if self.match_re.is_empty() {
+                self.ents.push(ff.clone());
+            } else {
+                let re = RegEx::new(self.match_re.to_owned());
+
+                if re.is_match(f.as_str()) {
+                    self.ents.push(ff.clone());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_attrs(&mut self) {
+        let dir = self.directory.clone();
+        let slash = String::from("/");
+
+        for e in &self.ents {
+            let mut ef = e.clone();
+            // if no full path in ents make it full for file_attributes_core
+            if !self.full {
+                ef = dir.clone() + &slash + &e.clone();
+            }
+            let fattrs = file_attributes_core(LispObject::from(ef.as_str()),
+                                              self.id_format);
+                                             // LispObject::from(self.id_format.as_str()));
+            self.ents_attrs.push(fattrs);
+        }
+    }
+
+    fn sort(&mut self) {
+        self.ents.sort_by(|a, b| {
+            if a < b {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+    }
+
+    fn to_list(&self) -> LispObject {
+        if !self.attrs {
+            list(&mut self.ents
+                 .iter()
+                 .map(|x| x.to_bstring())
+                 .collect::<Vec<_>>())
+        } else {
+            list(&mut self.ents
+                 .iter()
+                 .zip(self.ents_attrs.to_owned())
+                 .map(|x| LispObject::cons(LispObject::from(x.0.as_str()), x.1))
+                 .collect::<Vec<_>>())
+        }
+    }
+}
+
+struct RegEx {
+    recomp: *mut re_pattern_buffer,
+}
+
+impl RegEx {
+    fn new(match_re: String) -> Self {
+        Self {
+            recomp: unsafe {
+                compile_pattern(
+                    LispObject::from(match_re.as_str()),
+                    null_mut(),
+                    Qnil,
+                    false,
+                    true,
+                )
+            },
+        }
+    }
+    fn is_match(&self, s: &str) -> bool {
+        unsafe {
+            re_search(
+                self.recomp,
+                s.as_ptr() as *const c_char,
+                s.len() as size_t,
+                0,
+                s.len() as ssize_t,
+                null_mut(),
+            ) >= 0
+        }
+    }
+}
+
+fn directory_files_core(
+    directory: LispObject,
+    full: LispObject,
+    mre: String,
+    nosort: LispObject,
+    attrs: bool,
+    id_format: LispObject,
+) -> LispObject {
+    let mut ents = DirEntries::new(
+        directory.to_stdstring(),
+        full.is_not_nil(),
+        mre.clone(),
+        nosort.is_not_nil(),
+        attrs,
+        id_format);
+
+    let res = ents.get();
+    if res.is_err() {
+        Qnil
+    } else {
+        if !ents.nosort {
+            ents.sort();
+        }
+
+        if ents.attrs {
+            ents.get_attrs();
+        }
+        
+        ents.to_list()
+    }
+}
+
+// Called by list_system_processes in sysdep.c
+//fn gb_directory_files_internal(
+#[no_mangle]
+pub extern "C" fn directory_files_internal(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+    attrs: bool,
+    id_format: LispObject,
+) -> LispObject {
+    // let mut idf = String::from("NOTstring");
+    // if id_format.is_not_nil() {
+    //     idf = id_format.to_stdstring();
+    // }
+
+    let mut mre = String::from("");
+    if match_re.is_not_nil() {
+        mre = match_re.to_stdstring();
+    }
+
+    directory_files_core(
+        directory,
+        full,
+        mre,
+        nosort,
+        attrs,
+        id_format
+    )
+}
+
+pub fn directory_files_intro(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject
+) -> LispObject {
+    let dnexp = unsafe { Fexpand_file_name(directory, Qnil) };
+
+    let handler = unsafe { Ffind_file_name_handler(dnexp, Qdirectory_files) };
+    if handler.is_not_nil() {
+        return call!(handler, Qdirectory_files, dnexp, full, match_re, nosort);
+    }
+
+    directory_files_internal(
+        dnexp,
+        full,
+        match_re,
+        nosort,
+        false,
+        Qnil)
+}
+
+pub fn directory_files_and_attributes_intro(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+    id_format: LispObject
+) -> LispObject {
+    let dnexp = unsafe { Fexpand_file_name(directory, Qnil) };
+
+    let handler = unsafe { Ffind_file_name_handler(dnexp, Qdirectory_files_and_attributes) };
+    if handler.is_not_nil() {
+        return call!(handler, Qdirectory_files_and_attributes, dnexp, full, match_re, nosort, id_format);
+    }
+
+    directory_files_internal(
+        dnexp,
+        full,
+        match_re,
+        nosort,
+        true,
+        id_format)
 }
 
 struct FileAttrs {
