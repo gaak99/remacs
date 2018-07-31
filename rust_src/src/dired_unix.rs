@@ -102,7 +102,8 @@ impl LispObjectExt for LispObject {
 struct DirEntries {
     directory: String,
     full: bool,
-    match_re: String,
+    //match_re: String,
+    match_re: LispObject,
     nosort: bool,
     attrs: bool,
     //id_format: String,
@@ -117,7 +118,8 @@ impl DirEntries {
     fn new(
         directory: String,
         full: bool,
-        match_re: String,
+        //match_re: String,
+        match_re: LispObject,
         nosort: bool,
         attrs: bool,
         id_format: LispObject,
@@ -145,11 +147,13 @@ impl DirEntries {
             dd = dir.clone() + &slash + &dd.clone();
         }
 
-        if self.match_re.is_empty() {        
+//        if self.match_re.is_empty() {        
+        if self.match_re.is_nil() {        
             self.ents.push(d.clone());
             self.ents.push(dd.clone());
         } else {
-            let re = RegEx::new(self.match_re.to_owned());
+            let re = RegEx::new(self.match_re);
+            //let re = RegEx::new(self.match_re.to_owned());
 
             if re.is_match(d.as_str()) {
                 self.ents.push(d.clone());
@@ -187,10 +191,12 @@ impl DirEntries {
                 ff = fp.clone();
             }
 
-            if self.match_re.is_empty() {
+           // if self.match_re.is_empty() {
+            if self.match_re.is_nil() {
                 self.ents.push(ff.clone());
             } else {
-                let re = RegEx::new(self.match_re.to_owned());
+                //let re = RegEx::new(self.match_re.to_owned());
+                let re = RegEx::new(self.match_re);
 
                 if re.is_match(f.as_str()) {
                     self.ents.push(ff.clone());
@@ -249,11 +255,13 @@ struct RegEx {
 }
 
 impl RegEx {
-    fn new(match_re: String) -> Self {
+    //fn new(match_re: String) -> Self {
+    fn new(match_re: LispObject) -> Self {
         Self {
             recomp: unsafe {
                 compile_pattern(
-                    LispObject::from(match_re.as_str()),
+                    //LispObject::from(match_re.as_str()),
+                    match_re,
                     null_mut(),
                     Qnil,
                     false,
@@ -279,7 +287,8 @@ impl RegEx {
 fn directory_files_core(
     directory: LispObject,
     full: LispObject,
-    mre: String,
+    //mre: String,
+    match_re: LispObject,
     nosort: LispObject,
     attrs: bool,
     id_format: LispObject,
@@ -287,7 +296,8 @@ fn directory_files_core(
     let mut ents = DirEntries::new(
         directory.to_stdstring(),
         full.is_not_nil(),
-        mre.clone(),
+        //mre.clone(),
+        match_re,
         nosort.is_not_nil(),
         attrs,
         id_format);
@@ -324,15 +334,16 @@ pub extern "C" fn directory_files_internal(
     //     idf = id_format.to_stdstring();
     // }
 
-    let mut mre = String::from("");
-    if match_re.is_not_nil() {
-        mre = match_re.to_stdstring();
-    }
+    // let mut mre = String::from("");
+    // if match_re.is_not_nil() {
+    //     mre = match_re.to_stdstring();
+    // }
 
     directory_files_core(
         directory,
         full,
-        mre,
+        //mre,
+        match_re,
         nosort,
         attrs,
         id_format
