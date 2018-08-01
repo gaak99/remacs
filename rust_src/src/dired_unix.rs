@@ -140,26 +140,29 @@ impl DirEntries {
     fn add_dots(&mut self) {
         let dir = self.directory.clone();
         let slash = String::from("/");
-        let mut d = String::from(".");
-        let mut dd = String::from("..");
+        let d = String::from(".");
+        let dd = String::from("..");
+        let mut df = d.clone(); // final dot name
+        let mut ddf = dd.clone();
         if self.full {
-            d = dir.clone() + &slash + &d.clone();
-            dd = dir.clone() + &slash + &dd.clone();
+            df = dir.clone() + &slash + &d.clone();
+            ddf = dir.clone() + &slash + &dd.clone();
         }
 
 //        if self.match_re.is_empty() {        
         if self.match_re.is_nil() {        
-            self.ents.push(d.clone());
-            self.ents.push(dd.clone());
+            self.ents.push(df.clone());
+            self.ents.push(ddf.clone());
         } else {
             let re = RegEx::new(self.match_re);
             //let re = RegEx::new(self.match_re.to_owned());
 
+            // always match dot(s) !path
             if re.is_match(d.as_str()) {
-                self.ents.push(d.clone());
+                self.ents.push(df.clone());
             }
             if re.is_match(dd.as_str()) {
-                self.ents.push(dd.clone());
+                self.ents.push(ddf.clone());
             }
         }
     }
