@@ -112,7 +112,7 @@ struct DirEntries {
     //ents_matched: Vec<String>,
     ents_attrs: Vec<LispObject>,
     //ents_matched_lo: Vec<LispObject>,
-    slash_me_maybe: String,
+    //slash_me_maybe: String,
 }
 
 impl DirEntries {
@@ -134,44 +134,53 @@ impl DirEntries {
             id_format,
             ents: Vec::new(),
             ents_attrs: Vec::new(),
-            slash_me_maybe: String::from("/"),
+            //slash_me_maybe: String::from("/"),
         }
     }
 
     // Assumes expand_file_name haz already run on
     // self.directory and it will drop >1 '/' trailing chars.
     // So let's keep it at most one trailing '/'.
-    fn set_slash(&mut self) {
+    // fn set_slash(&mut self) {
+    //     let last_char = self.directory.as_str().chars().last().unwrap();
+    //     if last_char == '/' {
+    //         self.slash_me_maybe = String::from("");
+    //     }
+        
+    //     println!("add_dots: last_char={:?}", last_char.to_string());
+    //     println!("add_dots: slash_me_maybe={:?}", self.slash_me_maybe);
+
+    // }
+
+    // Assumes expand_file_name haz already run on
+    // self.directory and it will drop >1 '/' trailing chars.
+    // So let's keep it at most one trailing '/'.
+    fn get_full(&self, file: String) -> String {
         let last_char = self.directory.as_str().chars().last().unwrap();
         if last_char == '/' {
-            self.slash_me_maybe = String::from("");
+            //let full = self.directory.clone() + &file.clone();
+            self.directory.clone() + &file.clone()
+        } else {
+            self.directory.clone() + "/" + &file.clone()
         }
-        
-        println!("add_dots: last_char={:?}", last_char.to_string());
-        println!("add_dots: slash_me_maybe={:?}", self.slash_me_maybe);
-
     }
     
     // read_dir() does not return .&.. so bolt them on
     fn add_dots(&mut self) {
-        let dir = self.directory.clone();
-    
         let d = String::from(".");
         let dd = String::from("..");
         let mut df = d.clone(); // final dot name
         let mut ddf = dd.clone();
         if self.full {
-            df = dir.clone() + &self.slash_me_maybe + &d.clone();
-            ddf = dir.clone() + &self.slash_me_maybe + &dd.clone();
+            df = self.get_full(d.to_owned());
+            ddf = self.get_full(dd.to_owned());
         }
 
-//        if self.match_re.is_empty() {        
         if self.match_re.is_nil() {        
             self.ents.push(df.clone());
             self.ents.push(ddf.clone());
         } else {
             let re = RegEx::new(self.match_re);
-            //let re = RegEx::new(self.match_re.to_owned());
 
             // always match dot(s) !fullpath
             if re.is_match(d.as_str()) {
@@ -196,7 +205,7 @@ impl DirEntries {
             );
         }
 
-        self.set_slash();
+        //self.set_slash();
         self.add_dots();
         
         for ent in fs::read_dir(dir_p)? {
@@ -205,18 +214,16 @@ impl DirEntries {
             let f_enc_lo = LispObject::from(f_enc.as_str()); // encoded
             let f_dec_lo = unsafe { decode_file_name(f_enc_lo) }; // decoded
             let f = f_dec_lo.to_stdstring();
-            let fp = dir.clone() + &self.slash_me_maybe + &f.clone();
 
             let mut ff = f.clone();
             if self.full {
-                ff = fp.clone();
+                ff = self.get_full(f.to_owned());
             }
 
            // if self.match_re.is_empty() {
             if self.match_re.is_nil() {
                 self.ents.push(ff.clone());
             } else {
-                //let re = RegEx::new(self.match_re.to_owned());
                 let re = RegEx::new(self.match_re);
 
                 if re.is_match(f.as_str()) {
@@ -229,13 +236,12 @@ impl DirEntries {
     }
 
     fn get_attrs(&mut self) {
-        let dir = self.directory.clone();
-        
         for e in &self.ents {
             let mut ef = e.clone();
             // if no full path in ents make it full for file_attributes_core
             if !self.full {
-                ef = dir.clone() + &self.slash_me_maybe + &e.clone();
+                //ef = dir.clone() + &self.slash_me_maybe + &e.clone();
+                ef = self.get_full(e.to_owned());
             }
             let fattrs = file_attributes_core(LispObject::from(ef.as_str()),
                                               self.id_format);
@@ -316,7 +322,6 @@ fn directory_files_core(
     let mut ents = DirEntries::new(
         directory.to_stdstring(),
         full.is_not_nil(),
-        //mre.clone(),
         match_re,
         nosort.is_not_nil(),
         attrs,
