@@ -1,3 +1,6 @@
+#![allow(dead_code, unused_variables)]
+
+
 use libc::{c_char, c_long, endpwent, getgrgid, getpwent, getpwuid, group, passwd, size_t, ssize_t,
            timespec as c_timespec};
 
@@ -111,6 +114,166 @@ impl LispObjectExt for LispObject {
         String::from_utf8_lossy(slice).into_owned()
     }
 }
+
+//gb begin enum
+#[derive(Debug, Clone)]
+enum DirData {
+    Files {
+        fnames: Vec<String>
+    },
+    FilesAttrs {
+        fnames: Vec<String>,
+        fattrs: Vec<LispObject>,
+        id_format: String
+    },
+}
+#[derive(Debug, Clone)]
+enum SortFNames {
+    No,
+    Yes
+}
+#[derive(Debug, Clone)]
+enum FullPath {
+    No,
+    Yes
+}
+
+#[derive(Debug, Clone)]
+struct DirReq {// Directory request
+    ddata: DirData, // out
+    dname: String, // in
+    full: FullPath, // in
+    match_re: Option<LispObject>, // in
+    sortmemaybe: SortFNames, // in
+}
+
+impl DirReq {
+    fn new(
+        ddata: DirData,
+        dname: String,
+        full: FullPath,
+        match_re: Option<LispObject>,
+        sortmemaybe: SortFNames,
+    ) -> Self {
+        Self {
+            ddata,
+            dname,
+            full,
+            match_re,
+            sortmemaybe,
+        }
+    }
+}
+
+
+fn fattrs_from_os(fattrs: &mut Vec<String>, id_format: String) {//
+    fattrs.push(String::from("yo enumz attrs Lispobj from_os"));
+}
+
+// fn fattrs_to_list() -> LispObject {
+
+// }
+
+//fn fnames_to_list(fnames: &mut Vec<String>) -> LispObject { 
+fn fnames_to_list(fnames: &mut Vec<String>) -> LispObject { 
+    list(&mut fnames
+         .iter()
+         .map(|x| x.to_bstring())
+         .collect::<Vec<_>>())
+}
+
+fn fnames_from_os(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject>) {//
+    let res = read_dir(dname.to_owned(), fnames, match_re);
+    if res.is_err() {
+        xsignal!(
+            Qfile_missing,
+            format!("Opening directory: {}", res.unwrap_err()).to_bstring(),
+            dname.to_bstring()
+        );
+    }
+}
+fn read_dir(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject>) -> io::Result<()> {
+    let dir = dname.clone();
+    let dir_p = Path::new(&dir);
+    //    self.add_dots();
+    let mut re = RegEx::new(String::from("").to_bstring());
+    if let Some(x) = match_re {
+        re = RegEx::new(x);
+    }
+    for fname in fs::read_dir(dir_p)? {
+        let fname = fname?;
+        let f_enc = fname.file_name().into_string().unwrap();
+        let f_enc_lo = LispObject::from(f_enc.as_str()); // encoded
+        let f_dec_lo = unsafe { decode_file_name(f_enc_lo) }; // decoded
+        let f = f_dec_lo.to_stdstring();
+
+        if let Some(x) = match_re {
+            if re.is_match(f.as_str()) {
+                fnames.push(f);
+            }
+        } else {
+            fnames.push(f);
+        }
+    }
+
+    Ok(())
+}
+
+fn gbenum_directory_files_core(dr: DirReq) -> LispObject {
+    match dr.ddata { 
+        DirData::Files { mut fnames } => {
+            fnames_from_os(dr.dname, &mut fnames, dr.match_re);
+            //println!("dir_addfile: post pre got Files: {:?}", fnames);
+            //sort(dr.sortmemaybe, &mut fnames);
+            if let SortFNames::Yes = dr.sortmemaybe {
+                fnames.sort()
+            }
+            //println!("dir_addfile: post post got Files: {:?}", fnames);
+            fnames_to_list(&mut fnames)
+        },
+        DirData::FilesAttrs { mut fnames, mut fattrs, id_format } => {
+            //println!("dir_addfile: pre got attrs: {:?}", fattrs);
+            //fattrs_from_os(&mut fattrs, id_format);
+            //println!("dir_addfile: post got attrs: {:?}", fattrs);
+            //fattrs_to_list(fnames, fattrs)
+            fnames_to_list(&mut fnames)
+        }
+    }    
+}
+pub fn gbenum_directory_files_intro(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+) -> LispObject {
+    let dnexp = unsafe { Fexpand_file_name(directory, Qnil) };
+
+    let handler = unsafe { Ffind_file_name_handler(dnexp, Qdirectory_files) };
+    if handler.is_not_nil() {
+        return call!(handler, Qdirectory_files, dnexp, full, match_re, nosort);
+    }
+
+    let dd: DirData = DirData::Files { fnames: Vec::new() };
+    let dr: DirReq = DirReq::new(
+        dd,
+        dnexp.to_stdstring(),
+        FullPath::No,
+        match_re_to_option(match_re),
+        SortFNames::Yes
+    );
+
+    gbenum_directory_files_core(dr)
+}
+
+fn match_re_to_option(mre: LispObject) -> Option <LispObject> {
+    if mre.is_nil() {
+        return None
+    }
+
+    Some(mre)
+}
+
+//gb end enum
 
 struct DirFiles {
     directory: String,
@@ -648,3 +811,22 @@ pub fn get_users() -> LispObject {
 
     list(&mut unames)
 }
+
+// fn sort_fnames(fnames: &mut Vec<String>) {//obsolete!
+//     fnames.sort_by(|a, b| {
+//         if a < b {
+//             Ordering::Less
+//         } else {
+//             Ordering::Greater
+//         }
+//     });
+// }
+//fn sort(sfn: SortFNames, mut v: &mut Vec<String>) {
+
+// fn sort(sfn: SortFNames, v: &mut Vec<String>) {
+//     if let SortFNames::Yes = sfn {
+//         //sort_fnames(&mut v)
+//         v.sort()
+//     }
+// }
+

@@ -4,7 +4,7 @@ use remacs_macros::lisp_fn;
 
 #[cfg(unix)]
 use dired_unix::{directory_files_and_attributes_intro, directory_files_intro,
-                 file_attributes_intro, get_users};
+                 file_attributes_intro, get_users, gbenum_directory_files_intro};
 #[cfg(windows)]
 use dired_windows::{file_attributes_intro, get_users};
 use lisp::{defsubr, LispObject};
@@ -28,6 +28,17 @@ pub fn directory_files(
 ) -> LispObject {
     directory_files_intro(directory, full, match_re, nosort)
 }
+
+#[lisp_fn(min = "1")]
+pub fn gbenum_directory_files(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+) -> LispObject {
+    gbenum_directory_files_intro(directory, full, match_re, nosort)
+}
+
 
 /// Return a list of names of files and their attributes in DIRECTORY.
 /// There are four optional arguments:
