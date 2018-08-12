@@ -236,11 +236,21 @@ fn fnames_from_os(fnames: &mut Vec<String>, dname: String, match_re: Option<Lisp
 fn read_dir(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject>) -> io::Result<()> {
     let dir = dname.clone();
     let dir_p = Path::new(&dir);
-    //    self.add_dots();
+
     let mut re = RegEx::new(String::from("").to_bstring());
     if let Some(x) = match_re {
         re = RegEx::new(x);
     }
+
+    let dot = String::from(".");
+    if let Some(x) = match_re_maybe(dot.to_owned(), match_re, &re) {
+        fnames.push(dot);
+    }
+    let dotdot = String::from("..");
+    if let Some(x) = match_re_maybe(dotdot.to_owned(), match_re, &re) {
+        fnames.push(dotdot);
+    }
+
     for fname in fs::read_dir(dir_p)? {
         let fname = fname?;
         let f_enc = fname.file_name().into_string().unwrap();
@@ -248,11 +258,7 @@ fn read_dir(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject
         let f_dec_lo = unsafe { decode_file_name(f_enc_lo) }; // decoded
         let f = f_dec_lo.to_stdstring();
 
-        if let Some(x) = match_re {
-            if re.is_match(f.as_str()) {
-                fnames.push(f);
-            }
-        } else {
+        if let Some(x) = match_re_maybe(f.to_owned(), match_re, &re) {
             fnames.push(f);
         }
     }
@@ -260,6 +266,18 @@ fn read_dir(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject
     Ok(())
 }
 
+fn match_re_maybe(f: String, match_re: Option<LispObject>,  re: &RegEx) -> Option<String> {
+    match match_re {
+        Some(x) => {
+            if re.is_match(f.as_str()) {
+                Some(f)
+            } else {
+                None
+            }
+        },
+        None => Some(f)
+    }
+}
 
 pub fn gbenum_directory_files_intro(
     directory: LispObject,
