@@ -128,19 +128,18 @@ enum FullPath {
     Yes
 }
 
+// Directory request input
 #[derive(Debug, Clone)]
-struct DirReq {// Directory request
-//    ddata: DirData, // out
-    dname: String, // in
-    full: FullPath, // in
-    id_format: String, //in
-    match_re: Option<LispObject>, // in
-    sortmemaybe: SortFNames, // in
+struct DirReq {
+    dname: String,
+    full: FullPath,
+    id_format: String,
+    match_re: Option<LispObject>,
+    sortmemaybe: SortFNames,
 }
 
 impl DirReq {
     fn new(
-        //ddata: DirData,
         dname: String,
         full: FullPath,
         id_format: String,
@@ -148,7 +147,6 @@ impl DirReq {
         sortmemaybe: SortFNames,
     ) -> Self {
         Self {
-            //ddata,
             dname,
             full,
             id_format,
@@ -158,6 +156,7 @@ impl DirReq {
     }
 }
 
+// Directory data output
 #[derive(Debug, Clone)]
 enum DirData {
     Files {
@@ -166,15 +165,14 @@ enum DirData {
     FilesAttrs {
         fnames: Vec<String>,
         fattrs: Vec<LispObject>,
-        //id_format: String
     },
 }
 
 impl DirData {
-    fn to_list(&mut self, full: FullPath) -> LispObject {
+    fn to_list(&mut self, dname: String, full: FullPath) -> LispObject {
         match *self {
-            DirData::Files {ref mut fnames} => fnames_to_list(fnames, full),
-            DirData::FilesAttrs {ref mut fnames, ref mut fattrs} => fattrs_to_list(fnames, fattrs, full),
+            DirData::Files {ref mut fnames} => fnames_to_list(fnames, dname, full),
+            DirData::FilesAttrs {ref mut fnames, ref mut fattrs} => fattrs_to_list(fnames, fattrs, dname, full),
         }
     }
     fn sort(&mut self) {
@@ -199,24 +197,33 @@ impl DirData {
 
 fn gbenum_directory_files_core(dr: &DirReq, dd: &mut DirData) -> LispObject {
     dd.from_os(dr.dname.to_owned(), dr.match_re);
+
     if let SortFNames::Yes = dr.sortmemaybe {
         dd.sort();
     }
-    dd.to_list(dr.full.to_owned())
+    
+    dd.to_list(dr.dname.to_owned(), dr.full.to_owned())
 }
 
-fn fattrs_to_list(fnames: &mut Vec<String>, fattrs: &mut Vec<LispObject>, full: FullPath) -> LispObject {
-    fnames_to_list(fnames, full)
+fn fnames_to_list(fnames: &mut Vec<String>, dname: String, full: FullPath) -> LispObject { 
+    match full {
+        FullPath::No => list(&mut fnames
+                             .iter()
+                             .map(|x| x.to_bstring())
+                             .collect::<Vec<_>>()),
+        FullPath::Yes => list(&mut fnames
+                              .iter()
+                              .map(|x| x.to_full(dname.to_owned()))
+                              .map(|x| x.to_bstring())
+                              .collect::<Vec<_>>())
+    }
 }
 
-fn fnames_to_list(fnames: &mut Vec<String>, full: FullPath) -> LispObject { 
-    list(&mut fnames
-         .iter()
-         .map(|x| x.to_bstring())
-         .collect::<Vec<_>>())
+fn fattrs_to_list(fnames: &mut Vec<String>, fattrs: &mut Vec<LispObject>, dname:String, full: FullPath) -> LispObject {
+    fnames_to_list(fnames, dname, full)
 }
 
-fn fnames_from_os(fnames: &mut Vec<String>, dname: String, match_re: Option<LispObject>) {//
+fn fnames_from_os(fnames: &mut Vec<String>, dname: String, match_re: Option<LispObject>) {
     let res = read_dir(dname.to_owned(), fnames, match_re);
     if res.is_err() {
         xsignal!(
@@ -269,10 +276,10 @@ pub fn gbenum_directory_files_intro(
 
     let dr = DirReq::new(
         dnexp.to_stdstring(),
-        FullPath::No,
+        if full.is_nil() {FullPath::No} else {FullPath::Yes},
         String::from("Integer"),
-        match_re_to_option(match_re),
-        SortFNames::Yes
+        if match_re.is_nil() {None} else {Some(match_re)},
+        if nosort.is_nil() {SortFNames::Yes} else {SortFNames::No}
     );
     let mut dd = DirData::Files { fnames: Vec::new() };
 
@@ -280,13 +287,6 @@ pub fn gbenum_directory_files_intro(
                       
 }
 
-fn match_re_to_option(mre: LispObject) -> Option <LispObject> {
-    if mre.is_nil() {
-        return None
-    }
-
-    Some(mre)
-}
 //gb end enum
 
 struct DirFiles {
