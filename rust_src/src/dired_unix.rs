@@ -100,7 +100,7 @@ trait LispObjectExt {
 }
 
 impl LispObjectExt for LispObject {
-    fn to_idfstring(&self) -> String {
+    fn to_idfstring(&self) -> String {//gb dead sooon?
         if self.is_nil() {
             "NOTstring".to_string()
         } else {
@@ -133,7 +133,8 @@ enum FullPath {
 struct DirReq {
     dname: String,
     full: FullPath,
-    id_format: String,
+    //id_format: String,
+    id_format: LispObject,
     match_re: Option<LispObject>,
     sortmemaybe: SortFNames,
 }
@@ -142,7 +143,8 @@ impl DirReq {
     fn new(
         dname: String,
         full: FullPath,
-        id_format: String,
+//        id_format: String,
+        id_format: LispObject,
         match_re: Option<LispObject>,
         sortmemaybe: SortFNames,
     ) -> Self {
@@ -172,7 +174,7 @@ impl DirData {
     fn to_list(&mut self, dname: String, full: FullPath) -> LispObject {
         match *self {
             DirData::Files {ref mut fnames} => fnames_to_list(fnames, dname, full),
-            DirData::FilesAttrs {ref mut fnames, ref mut fattrs} => fattrs_to_list(fnames, fattrs, dname, full),
+            DirData::FilesAttrs {ref mut fnames, ref mut fattrs} => fattrs_to_list(fattrs, fnames, dname, full),
         }
     }
     fn sort(&mut self) {
@@ -181,22 +183,22 @@ impl DirData {
             DirData::FilesAttrs {ref mut fnames, ref fattrs} => fnames.sort()
         }
     }
-    fn from_os(&mut self, dname: String, match_re: Option<LispObject>) {
+    fn from_os(&mut self, dname: String, match_re: Option<LispObject>, id_format: LispObject) {
         match *self {
             DirData::Files {ref mut fnames} => {
                 fnames_from_os(fnames, dname, match_re);
-                println!("from_os: {:?}", fnames);
+                //println!("from_os: {:?}", fnames);
             },
             DirData::FilesAttrs {ref mut fnames, ref mut fattrs} => {
-                fnames_from_os(fnames, dname, match_re);
-                // fattrs_from_os
+                fnames_from_os(fnames, dname.to_owned(), match_re);
+                fattrs_from_os(fattrs, fnames, dname.to_owned(), id_format);
             }
         }
     }
 }
 
 fn gbenum_directory_files_core(dr: &DirReq, dd: &mut DirData) -> LispObject {
-    dd.from_os(dr.dname.to_owned(), dr.match_re);
+    dd.from_os(dr.dname.to_owned(), dr.match_re, dr.id_format);
 
     if let SortFNames::Yes = dr.sortmemaybe {
         dd.sort();
@@ -219,8 +221,34 @@ fn fnames_to_list(fnames: &mut Vec<String>, dname: String, full: FullPath) -> Li
     }
 }
 
-fn fattrs_to_list(fnames: &mut Vec<String>, fattrs: &mut Vec<LispObject>, dname:String, full: FullPath) -> LispObject {
-    fnames_to_list(fnames, dname, full)
+fn fattrs_to_list(fattrs: &mut Vec<LispObject>, fnames: &mut Vec<String>, dname:String, full: FullPath) -> LispObject {
+    //    fnames_to_list(fnames, dname, full)
+    match full {
+        FullPath::No => list(&mut fnames
+                             .iter()
+                             .map(|x| x.to_bstring())
+                             .zip(fattrs.to_owned())
+                             .map(|x| LispObject::cons(x.0, x.1))
+                             .collect::<Vec<_>>()),
+        FullPath::Yes => list(&mut fnames
+                              .iter()
+                              .map(|x| x.to_full(dname.to_owned()))
+                              .map(|x| x.to_bstring())
+                              .zip(fattrs.to_owned())
+                              .map(|x| LispObject::cons(x.0, x.1))
+                              .collect::<Vec<_>>())
+        
+    }
+}
+
+fn fattrs_from_os(fattrs: &mut Vec<LispObject>, fnames: &mut Vec<String>, dname:String, id_format: LispObject) {
+    for f in fnames {
+        let fa = file_attributes_core(
+            LispObject::from(f.to_full(dname.to_owned()).as_str()),
+            id_format,
+        );
+        fattrs.push(fa);
+    }
 }
 
 fn fnames_from_os(fnames: &mut Vec<String>, dname: String, match_re: Option<LispObject>) {
@@ -233,6 +261,7 @@ fn fnames_from_os(fnames: &mut Vec<String>, dname: String, match_re: Option<Lisp
         );
     }
 }
+
 fn read_dir(dname: String, fnames: &mut Vec<String>, match_re: Option<LispObject>) -> io::Result<()> {
     let dir = dname.clone();
     let dir_p = Path::new(&dir);
@@ -295,11 +324,41 @@ pub fn gbenum_directory_files_intro(
     let dr = DirReq::new(
         dnexp.to_stdstring(),
         if full.is_nil() {FullPath::No} else {FullPath::Yes},
-        String::from("Integer"),
+        //        String::from("Integer"),
+        Qnil,
         if match_re.is_nil() {None} else {Some(match_re)},
         if nosort.is_nil() {SortFNames::Yes} else {SortFNames::No}
     );
     let mut dd = DirData::Files { fnames: Vec::new() };
+
+    gbenum_directory_files_core(&dr, &mut dd)
+                      
+}
+
+pub fn gbenum_directory_files_and_attributes_intro(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+    id_format: LispObject,
+) -> LispObject {
+    let dnexp = unsafe { Fexpand_file_name(directory, Qnil) };
+
+    let handler = unsafe { Ffind_file_name_handler(dnexp, Qdirectory_files) };
+    if handler.is_not_nil() {
+        return call!(handler, Qdirectory_files, dnexp, full, match_re, nosort);
+    }
+
+    let dr = DirReq::new(
+        dnexp.to_stdstring(),
+        if full.is_nil() {FullPath::No} else {FullPath::Yes},
+        //String::from("Integer"),
+        //id_format.to_idfstring(),
+        id_format,
+        if match_re.is_nil() {None} else {Some(match_re)},
+        if nosort.is_nil() {SortFNames::Yes} else {SortFNames::No}
+    );
+    let mut dd = DirData::FilesAttrs { fnames: Vec::new(), fattrs: Vec::new() };
 
     gbenum_directory_files_core(&dr, &mut dd)
                       

@@ -3,7 +3,8 @@
 use remacs_macros::lisp_fn;
 
 #[cfg(unix)]
-use dired_unix::{directory_files_and_attributes_intro, directory_files_intro,
+use dired_unix::{directory_files_and_attributes_intro, gbenum_directory_files_and_attributes_intro,
+                 directory_files_intro,
                  file_attributes_intro, get_users, gbenum_directory_files_intro};
 #[cfg(windows)]
 use dired_windows::{file_attributes_intro, get_users};
@@ -26,7 +27,8 @@ pub fn directory_files(
     match_re: LispObject,
     nosort: LispObject,
 ) -> LispObject {
-    directory_files_intro(directory, full, match_re, nosort)
+    //directory_files_intro(directory, full, match_re, nosort)
+    gbenum_directory_files_intro(directory, full, match_re, nosort)
 }
 
 #[lisp_fn(min = "1")]
@@ -37,6 +39,17 @@ pub fn gbenum_directory_files(
     nosort: LispObject,
 ) -> LispObject {
     gbenum_directory_files_intro(directory, full, match_re, nosort)
+}
+
+#[lisp_fn(min = "1")]
+pub fn gbenum_directory_files_and_attributes(
+    directory: LispObject,
+    full: LispObject,
+    match_re: LispObject,
+    nosort: LispObject,
+    id_format: LispObject,
+) -> LispObject {
+    gbenum_directory_files_and_attributes_intro(directory, full, match_re, nosort, id_format)
 }
 
 
