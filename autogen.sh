@@ -34,6 +34,7 @@
 ## Assumes this script is run in Remacs root dir (as does other code in this script).
 ## Future maybe: let an env var set/override this.
 rust_toolchain_vers_path="./rust-toolchain"
+rustup_min_version="1.13" # disregard micro version
 
 ## Tools we need:
 ## Note that we respect the values of AUTOCONF etc, like autoreconf does.
@@ -68,45 +69,6 @@ minor_version ()
     echo $1 | sed -e 's/[0-9][0-9]*\.\([0-9][0-9]*\).*/\1/'
 }
 
-## $1 = program
-## $2 = minimum version.
-## Return 0 if program is present with version >= minimum version.
-## Return 1 if program is missing.
-## Return 2 if program is present but too old.
-## Return 3 for unexpected error (eg failed to parse version).
-check_version ()
-{
-    ## Respect, e.g., $AUTOCONF if it is set, like autoreconf does.
-    uprog0=`echo $1 | sed -e 's/-/_/g' -e 'y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/'`
-
-    eval uprog=\$${uprog0}
-
-    if [ x"$uprog" = x ]; then
-        uprog=$1
-    else
-        printf '%s' "(using $uprog0=$uprog) "
-    fi
-
-    command -v $uprog > /dev/null || return 1
-    have_version=`get_version $uprog` || return 4
-
-    have_maj=`major_version $have_version`
-    need_maj=`major_version $2`
-
-    [ x"$have_maj" != x ] && [ x"$need_maj" != x ] || return 3
-
-    [ $have_maj -gt $need_maj ] && return 0
-    [ $have_maj -lt $need_maj ] && return 2
-
-    have_min=`minor_version $have_version`
-    need_min=`minor_version $2`
-
-    [ x"$have_min" != x ] && [ x"$need_min" != x ] || return 3
-
-    [ $have_min -ge $need_min ] && return 0
-    return 2
-}
-
 do_check=true
 do_autoconf=false
 do_git=false
@@ -136,8 +98,24 @@ case $do_autoconf,$do_git in
     test -r .git && do_git=true;;
 esac
 
-echo "Checking Rust toolchain install ..."
-command -v rustup >/dev/null 2>&1 || { echo >&2 "Remacs requires the rustup command to be installed in order to build. Please see https://www.rustup.rs/; Aborting."; exit 1; }
+## $1 = Remacs needed version
+check_rust_active_vers ()
+{
+    rustup show active-toolchain | grep $1 >/dev/null
+}
+
+## $1 = Remacs needed version
+check_rust_installed_vers ()
+{
+    rustup toolchain list | grep $1 >/dev/null
+}
+
+## $1 = string to check against avtive version
+check_rust_string ()
+{
+    #echo $rustup_active_version | grep 'directory override'  >/dev/null
+    rustup show active-toolchain | grep "$1" >/dev/null
+}
 
 ## $1 = Remacs required version
 ## Return 0 if Remacs Rust toolchain required version is installed and active
@@ -148,43 +126,116 @@ check_rust_version ()
 {
     remacs_version=$1
 
-    rustup_active_version=$(rustup show | awk '/active toolchain/ {getline; getline; getline; print}')
-    echo $rustup_active_version | grep $remacs_version >/dev/null && return 0
-
-    rustup_installed=$(rustup show | awk '/installed/{flag=1; next} /active/{flag=0} flag')
-    echo $rustup_installed | grep $remacs_version >/dev/null || return 1
-
-    echo $rustup_active_version | grep 'directory override'  >/dev/null && return 2
-
+    #rustup_active_version=$(rustup show | awk '/active toolchain/ {getline; getline; getline; print}')
+    #echo $rustup_active_version | grep $remacs_version >/dev/null && return 0
+    check_rust_active_vers $remacs_version && return 0
+    
+    #rustup_installed=$(rustup show | awk '/installed/{flag=1; next} /active/{flag=0} flag')
+    #echo $rustup_installed | grep $remacs_version >/dev/null || return 1
+    check_rust_installed_vers $remacs_version || return 1
+    
+    #echo $rustup_active_version | grep 'directory override'  >/dev/null && return 2
+    check_rust_string 'directory override' && return 2
+    
     return 3
 }
 
-## If the rust toolchain version path is set then check the version
-if [ -n $rust_toolchain_vers_path ] ; then
+get_rustup_version ()
+{
+    full_output=$(rustup --version 2>/dev/null)
+    set $full_output
 
-    if [ ! -r $rust_toolchain_vers_path ] ; then
-	echo >&2 "Remacs rust-toolchain file does not exist or is not readable: $rust_toolchain_vers_path."
-	exit 1
+    echo $2
+}
+
+## $1 = program
+## If program has a corresponding env var, echo it's value.
+check_prog_env ()
+{
+    ##gb set -x
+    ## Respect, e.g., $AUTOCONF if it is set, like autoreconf does.
+    uprog0=`echo $1 | sed -e 's/-/_/g' -e 'y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/'`
+
+    eval uprog=\$${uprog0}
+
+    if [ x"$uprog" = x ]; then
+        uprog=$1
+    else
+        printf '%s' "(using $uprog0=$uprog) "
     fi
 
-    check_rust_version $(cat $rust_toolchain_vers_path)
-    retval=$?
+    echo $uprog
+}
 
-    case $retval in
-        0) echo "Your system has the required Rust toolchain installed for building Remacs." ;;
-        1) echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
-	   echo >&2 "Run 'rustup install $remacs_version'."
-	   exit 1 ;;
-        2) echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
-	   echo >&2 "The active version is not the required one and is set via directory override:\n\t$rustup_active_version"
-	   echo >&2 "Run 'rustup override unset' in this directory."
-	   exit 1 ;;
-        *) # /should/ not happen
-	   echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
-	   exit 1 ;;
-    esac
+## $1 = program
+## $2 = needed minimum version
+## $3 = installed version
+## Return 0 if program is present with version >= minimum version.
+## Return 1 if program is missing.
+## Return 2 if program is present but too old.
+## Return 3 for unexpected error (eg failed to parse version).
+check_version ()
+{
+    command -v $uprog > /dev/null || return 1
 
+    have_version=$3
+    
+    have_maj=`major_version $have_version`
+    need_maj=`major_version $2`
+
+    [ x"$have_maj" != x ] && [ x"$need_maj" != x ] || return 3
+
+    [ $have_maj -gt $need_maj ] && return 0
+    [ $have_maj -lt $need_maj ] && return 2
+
+    have_min=`minor_version $have_version`
+    need_min=`minor_version $2`
+
+    [ x"$have_min" != x ] && [ x"$need_min" != x ] || return 3
+
+    [ $have_min -ge $need_min ] && return 0
+    
+    return 2
+}
+
+
+if [ ! -r $rust_toolchain_vers_path ] ; then
+    echo >&2 "Remacs rust-toolchain file does not exist or is not readable: $rust_toolchain_vers_path."
+    exit 1
 fi
+
+check_version $(check_prog_env "rustup") $rustup_min_version $(get_rustup_version)
+retval=$?
+
+case $retval in
+    0) ;; # ok
+    1) echo 2>&1 "Remacs requires the rustup command to be installed in order to build."
+       echo 2>&1 "See 'https://www.rustup.rs/'."
+       exit 1 ;;
+    2) echo >&2 "Remacs requires rustup minimum version $rustup_min_version."
+       echo >&2 "Run 'rustup self update'."
+       exit 1 ;;
+    *) # /should/ not happen
+	echo >&2 "Remacs requires rustup minimum version $rustup_min_version."
+	exit 1 ;;
+esac
+
+check_rust_version $(cat $rust_toolchain_vers_path)
+retval=$?
+
+case $retval in
+    0) echo "Your system has the required Rust toolchain installed for building Remacs." ;;
+    1) echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
+       echo >&2 "Run 'rustup install $remacs_version'."
+       exit 1 ;;
+    2) echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
+       echo >&2 "The active version is not the required one and is set via directory override:\n\t$rustup_active_version"
+       echo >&2 "Run 'rustup override unset' in this directory."
+       exit 1 ;;
+    *) # /should/ not happen
+	echo >&2 "Remacs currently requires Rust toolchain version $remacs_version."
+	exit 1 ;;
+esac
 
 # Generate Autoconf-related files, if requested.
 
@@ -205,7 +256,8 @@ if $do_autoconf; then
 
       printf '%s' "Checking for $prog (need at least version $min) ... "
 
-      check_version $prog $min
+      #check_version $prog $min
+      check_version $(check_prog_env $prog) $min $(get_version $prog)
 
       retval=$?
 
